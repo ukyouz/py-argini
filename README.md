@@ -50,20 +50,3 @@ args = argini.get_uesr_inputs(parser, user_validators={
     "test": ValidFile,
 }
 ```
-
-### for every argument with certain types
-
-Validate certain type of user input. You *NEED* to set default value for this to work properly, or arguments will be treated as `str` type.
-
-```python
-class ValidFile(argini.Validator):
-    @staticmethod
-    def support_types() -> list[str]:
-        return ["str"]
-
-    @staticmethod
-    def validate_input(input: str) -> bool:
-        return Path(input).exists()
-```
-
-You don't have to, though you still can, pass to `get_user_inputs` method if you use this method. It is automatically registered.
