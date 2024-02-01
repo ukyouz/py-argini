@@ -161,6 +161,9 @@ def get_user_inputs(
         print(action.help + q)
         while True:
             data = input("? ")
+            if data == "" and default_txt:
+                data = default_txt
+                break
             if val_func.validate_input(data):
                 break
 
