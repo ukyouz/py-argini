@@ -4,6 +4,10 @@ from argparse import ArgumentParser, Namespace
 from typing import Any
 
 
+class MissingRequiredArgument(Exception):
+    """ missing required argument """
+
+
 class Validator(ABC):
     @staticmethod
     @abstractmethod
@@ -141,13 +145,17 @@ def get_user_inputs(
         value is a subclass of argini.Validator
     """
     user_validators = user_validators or {}
+    only_asks = only_asks or []
 
     args = Namespace()
     for action, val_func in _iter_actions(parser, user_validators=user_validators):
 
-        if action is not None and action.dest not in only_asks:
-            setattr(args, action.dest, action.default)
-            continue
+        if only_asks:
+            if action is not None and action.dest not in only_asks:
+                if action.required and action.default is not None:
+                    raise MissingRequiredArgument(action.dest)
+                setattr(args, action.dest, action.default)
+                continue
 
         default_txt = val_func.get_value_repr(action.default)
         q = f" (Default: {default_txt}) " if default_txt else ""
