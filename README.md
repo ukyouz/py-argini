@@ -19,7 +19,7 @@ parser.add_argument("--test")
 
 if len(sys.argv) == 1:
     import argini
-    ini = Path(__file__).parent / "config.ini"
+    ini = Path(__file__).with_suffix(".ini")
     argini.import_from_ini(parser, ini)
     args = argini.get_user_inputs(parser, only_asks=['test'])
     argini.save_to_ini(parser, ini, args)
