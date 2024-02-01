@@ -10,7 +10,6 @@ class MissingRequiredArgument(Exception):
 
 class Validator(ABC):
     @staticmethod
-    @abstractmethod
     def support_types() -> list[str]:
         return [""]
 
@@ -57,7 +56,6 @@ class StrType(Validator):
 
     @staticmethod
     def get_value_from_input(input: str) -> bool:
-        print(input)
         return input.strip()
 
 
