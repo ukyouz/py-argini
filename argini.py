@@ -160,7 +160,7 @@ def get_user_inputs(
 
         print(action.help + q)
         while True:
-            data = input("? ")
+            data = input(action.dest + "? ")
             if data == "" and default_txt:
                 data = default_txt
                 break
