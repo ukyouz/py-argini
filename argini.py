@@ -15,7 +15,10 @@ class Validator(ABC):
 
     @staticmethod
     def get_value_repr(val: Any) -> str:
-        return repr(val)
+        if isinstance(val, str):
+            return val
+        else:
+            return repr(val)
 
     @staticmethod
     def validate_input(input: str) -> bool:
