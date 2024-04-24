@@ -8,6 +8,19 @@ class MissingRequiredArgument(Exception):
     """ missing required argument """
 
 
+# https://stackoverflow.com/questions/30239092/how-to-get-multiline-input-from-the-user
+def input_multilines(title: str=""):
+    print(title + "Item per line. Press Ctrl-Z in a new line then Enter to continue.")
+    contents = []
+    while True:
+        try:
+            line = input()
+        except EOFError:
+            break
+        contents.append(line)
+    return " ".join(contents)
+
+
 class Validator(ABC):
     @staticmethod
     def support_types() -> list[str]:
@@ -65,7 +78,7 @@ class StrType(Validator):
 class IterableType(Validator):
     @staticmethod
     def support_types() -> list[str]:
-        return ["list", "typle"]
+        return ["list", "tuple"]
 
     @staticmethod
     def get_value_repr(val) -> str:
@@ -136,7 +149,7 @@ def import_from_ini(
 def get_user_inputs(
     parser: ArgumentParser,
     only_asks: list[str]=None,
-    user_validators: dict[str, Validator]=None
+    user_validators: dict[str, Validator]=None,
 ) -> Namespace:
     """
     `only_asks`: choose which arguments to ask user
@@ -163,7 +176,10 @@ def get_user_inputs(
 
         print(action.help + q)
         while True:
-            data = input(action.dest + "? ")
+            if action.nargs in {"*", "+"}:
+                data = input_multilines(action.dest + "? ")
+            else:
+                data = input(action.dest + "? ")
             if data == "" and default_txt:
                 data = default_txt
                 break

@@ -15,7 +15,8 @@ import argparse
 from pathlib import Path
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--test")
+parser.add_argument("--test")  # basic input
+parser.add_argument("--fields", nargs="*")  # multiline input
 
 if len(sys.argv) == 1:
     import argini
