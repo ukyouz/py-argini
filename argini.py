@@ -9,7 +9,7 @@ class MissingRequiredArgument(Exception):
 
 
 # https://stackoverflow.com/questions/30239092/how-to-get-multiline-input-from-the-user
-def input_multilines(title: str=""):
+def input_multilines(title: str="") -> str:
     print(title + "Item per line. Press Ctrl-Z in a new line then Enter to continue.")
     contents = []
     while True:
@@ -18,7 +18,7 @@ def input_multilines(title: str=""):
         except EOFError:
             break
         contents.append(line)
-    return " ".join(contents)
+    return " ".join(contents).strip()
 
 
 class Validator(ABC):
