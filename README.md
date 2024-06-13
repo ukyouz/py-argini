@@ -51,3 +51,20 @@ args = argini.get_uesr_inputs(parser, user_validators={
     "test": ValidFile,
 }
 ```
+
+## With 3rd Party Package Installed
+
+- pip install survey
+
+```bash
+args = argini.get_user_inputs_with_survey(parser)
+```
+
+
+## Development
+
+You need to install these packages for testing:
+
+```bash
+> pip install pytest mock
+```
