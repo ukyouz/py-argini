@@ -1,6 +1,7 @@
 import configparser
-from abc import ABC, abstractmethod
-from argparse import ArgumentParser, Namespace
+from abc import ABC
+from argparse import ArgumentParser
+from argparse import Namespace
 from typing import Any
 
 
@@ -8,8 +9,12 @@ class MissingRequiredArgument(Exception):
     """ missing required argument """
 
 
+class NotSupportError(Exception):
+    """ error usage for this package """
+
+
 # https://stackoverflow.com/questions/30239092/how-to-get-multiline-input-from-the-user
-def input_multilines(title: str="") -> str:
+def input_multilines(title: str="") -> list[str]:
     print(title + "Item per line. Press Ctrl-Z in a new line then Enter to continue.")
     contents = []
     while True:
@@ -17,15 +22,11 @@ def input_multilines(title: str="") -> str:
             line = input()
         except EOFError:
             break
-        contents.append(line)
-    return " ".join(contents).strip()
+        contents += line.splitlines()
+    return contents
 
 
 class Validator(ABC):
-    @staticmethod
-    def support_types() -> list[str]:
-        return [""]
-
     @staticmethod
     def get_value_repr(val: Any) -> str:
         if isinstance(val, str):
@@ -34,28 +35,15 @@ class Validator(ABC):
             return repr(val)
 
     @staticmethod
-    def validate_input(input: str) -> bool:
+    def validate_input(input: str | list) -> bool:
         return input != ""
 
     @staticmethod
-    def get_value_from_input(input: str) -> Any:
+    def get_value_from_input(input: str | list) -> Any:
         return input
-
-    @staticmethod
-    def get_validator(type):
-        type_name = type.__name__
-        subclasses = Validator.__subclasses__()
-        for c in subclasses:
-            if type_name in c.support_types():
-                return c
-        return None
 
 
 class DummyType(Validator):
-    @staticmethod
-    def support_types() -> list[str]:
-        return ["NoneType"]
-
     @staticmethod
     def get_value_repr(val: Any) -> str:
         return ""
@@ -63,45 +51,48 @@ class DummyType(Validator):
 
 class StrType(Validator):
     @staticmethod
-    def support_types() -> list[str]:
-        return ["str"]
-
-    @staticmethod
     def get_value_repr(val: str) -> str:
         return val
 
     @staticmethod
-    def get_value_from_input(input: str) -> bool:
+    def get_value_from_input(input: str | list) -> str:
+        if not isinstance(input, str):
+            raise NotSupportError(input)
         return input.strip()
 
 
 class IterableType(Validator):
     @staticmethod
-    def support_types() -> list[str]:
-        return ["list", "tuple"]
-
-    @staticmethod
     def get_value_repr(val) -> str:
         return " ".join([str(x) for x in val])
 
     @staticmethod
-    def get_value_from_input(input: str) -> list:
-        l = input.split(" ")
-        return [x.strip() for x in l if x]
+    def get_value_from_input(input: str | list) -> list:
+        if isinstance(input, str):
+            l = input.split(" ")
+            return [x.strip() for x in l if x]
+        else:
+            return input
 
 
 class BoolType(Validator):
     @staticmethod
-    def support_types() -> list[str]:
-        return ["bool"]
-
-    @staticmethod
-    def get_value_from_input(input: str) -> bool:
+    def get_value_from_input(input: str | list) -> bool:
+        if not isinstance(input, str):
+            raise NotSupportError(input)
         return input.strip().lower() in {
             "1",
             "true",
             "yes",
         }
+
+
+DEFAULT_VALIDATOR = {
+    str: StrType,
+    list: IterableType,
+    tuple: IterableType,
+    bool: BoolType,
+}
 
 
 def _iter_actions(
@@ -114,12 +105,12 @@ def _iter_actions(
         if action.dest == "help":
             continue
         if action.dest in user_validators:
-            val_func = user_validators[action.dest]()
+            validator = user_validators[action.dest]
         else:
             t = type(getattr(args, action.dest, action.default)) or str
-            val_func = Validator.get_validator(t)()
+            validator = DEFAULT_VALIDATOR.get(t, DummyType)
 
-        yield action, val_func
+        yield action, validator
 
 
 def import_from_ini(
@@ -136,12 +127,12 @@ def import_from_ini(
     config.read(ini_file)
     default_section = config["DEFAULT"]
     init_configs = {}
-    for action, val_func in _iter_actions(parser, user_validators=user_validators):
+    for action, validator in _iter_actions(parser, user_validators=user_validators):
         if action.dest not in default_section:
             continue
         data = default_section[action.dest]
-        if val_func.validate_input(data):
-            val = val_func.get_value_from_input(data)
+        if validator.validate_input(data):
+            val = validator.get_value_from_input(data)
             init_configs[action.dest] = val
     parser.set_defaults(**init_configs)
 
@@ -162,7 +153,7 @@ def get_user_inputs(
     only_asks = only_asks or []
 
     args = Namespace()
-    for action, val_func in _iter_actions(parser, user_validators=user_validators):
+    for action, validator in _iter_actions(parser, user_validators=user_validators):
 
         if only_asks:
             if action is not None and action.dest not in only_asks:
@@ -171,22 +162,31 @@ def get_user_inputs(
                 setattr(args, action.dest, action.default)
                 continue
 
-        default_txt = val_func.get_value_repr(action.default)
+        default_txt = validator.get_value_repr(action.default)
         q = f" (Default: {default_txt}) " if default_txt else ""
+        opts = "{%s}" % ",".join(action.choices) + " " if action.choices else ""
 
-        print(action.help + q)
+        if title := (action.help or "") + q:
+            print(title)
         while True:
+            # Get User Input
             if action.nargs in {"*", "+"}:
                 data = input_multilines(action.dest + "? ")
             else:
-                data = input(action.dest + "? ")
+                data = input(action.dest + "? " + opts)
             if data == "" and default_txt:
                 data = default_txt
-                break
-            if val_func.validate_input(data):
+
+            # Validation
+            if action.choices:
+                if data in action.choices:
+                    break
+                else:
+                    print("Oops! not a valid choice.")
+            elif validator.validate_input(data):
                 break
 
-        value = val_func.get_value_from_input(data)
+        value = validator.get_value_from_input(data)
         setattr(args, action.dest, value)
 
     return args
@@ -209,3 +209,18 @@ def save_to_ini(
 
     with open(ini_file, 'w') as config_file:
         config.write(config_file)
+
+
+if __name__ == "__main__":
+    # manually simple cli test
+    import sys
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--test")  # line
+    parser.add_argument("--fruit", choices=["apple", "banana"])  # choice
+    parser.add_argument("--description", nargs="*")  # multiline text
+    if len(sys.argv) == 1:
+        args = get_user_inputs(parser)
+    else:
+        args = parser.parse_args()
+    save_to_ini(parser, "test.ini", args)
