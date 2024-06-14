@@ -198,7 +198,7 @@ def get_user_inputs(
                 data = input_multilines(action.dest + "? ")
             else:
                 data = input(action.dest + "? " + opts)
-            if data == "" and default_txt:
+            if not data and default_txt:
                 data = default_txt
 
             # Validation
