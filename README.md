@@ -66,5 +66,5 @@ args = argini.get_user_inputs_with_survey(parser)
 You need to install these packages for testing:
 
 ```bash
-> pip install pytest mock
+> pip install pytest pytest-mock
 ```
