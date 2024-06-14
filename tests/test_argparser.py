@@ -1,12 +1,10 @@
 import argparse
 import pytest
-import builtins
-from functools import partial
 from pathlib import Path
-from typing import Iterable
 
 import argini
 
+TEST_INI_FILE = "__test.ini"
 
 @pytest.fixture
 def simple_parser() -> argparse.ArgumentParser:
@@ -16,6 +14,25 @@ def simple_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fruit", choices=["apple", "banana"])  # choice
     parser.add_argument("--ok", action="store_true")  # flag
     return parser
+
+
+def test_1_ini_io(simple_parser: argparse.ArgumentParser, mocker):
+    args = simple_parser.parse_args(
+        [
+            "--test", "123",
+            "--other", "aaa",
+            "--fruit", "banana",
+            "--ok"
+        ]
+    )
+    argini.save_to_ini(simple_parser, TEST_INI_FILE, args)
+    assert Path(TEST_INI_FILE).exists()
+
+    argini.import_from_ini(simple_parser, TEST_INI_FILE)
+    assert simple_parser.get_default("test") == "123"
+    assert simple_parser.get_default("other") == "aaa"
+    assert simple_parser.get_default("fruit") == "banana"
+    assert simple_parser.get_default("ok") is True
 
 
 def test_1(simple_parser, mocker):
@@ -67,6 +84,22 @@ def multiline_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def test_multiline_ini_io(multiline_parser: argparse.ArgumentParser, mocker):
+    args = multiline_parser.parse_args(
+        [
+            "--options", "aaa", "bbb",
+            "--flags", "1",
+            "--flags", "2",
+        ]
+    )
+    argini.save_to_ini(multiline_parser, TEST_INI_FILE, args)
+    assert Path(TEST_INI_FILE).exists()
+
+    argini.import_from_ini(multiline_parser, TEST_INI_FILE)
+    assert multiline_parser.get_default("options") == ["aaa", "bbb"]
+    assert multiline_parser.get_default("flags") == ["1", "2"]
+
+
 def test_multiline(multiline_parser: argparse.ArgumentParser, mocker):
     with mocker.patch("argini.input_multilines", side_effect=(
         (
@@ -84,12 +117,7 @@ def test_multiline_default(multiline_parser: argparse.ArgumentParser, mocker):
         options=["aaa", "bbb"],
         flags=["1", "2"],
     )
-    with mocker.patch("argini.input_multilines", side_effect=(
-        (
-            [],
-            [],
-        )
-    )):
+    with mocker.patch("argini.input_multilines", return_value=[]):
         args = argini.get_user_inputs(multiline_parser)
     assert args.options == ["aaa", "bbb"]
     assert args.flags == ["1", "2"]
