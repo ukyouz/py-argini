@@ -102,7 +102,7 @@ class BoolType(Validator):
 
     @staticmethod
     def match_action(action) -> bool:
-        return isinstance(action.default, bool)
+        return isinstance(action.default, bool) or action.__class__.__name__ == "_StoreTrueAction"
 
 
 DEFAULT_VALIDATOR = {
@@ -156,7 +156,10 @@ def import_from_ini(
         if action.dest not in default_section:
             continue
         data = default_section[action.dest]
-        val = validator.get_value_from_input(data)
+        if IterableType.match_action(action):
+            val = validator.get_value_from_input(data)
+        else:
+            val = data
         if validator.validate_input(val):
             init_configs[action.dest] = val
     parser.set_defaults(**init_configs)
@@ -242,11 +245,10 @@ def get_user_inputs_with_survey(
                 setattr(args, action.dest, action.default)
                 continue
 
+        default_txt = validator.get_value_repr(action.default)
         if BoolType.match_action(action) or action.choices:
-            default_txt = ""
             q = ""
         else:
-            default_txt = validator.get_value_repr(action.default)
             q = f" (Default: {default_txt}) "
 
         if title := (action.help or "") + q:
@@ -324,7 +326,7 @@ if __name__ == "__main__":
     parser.add_argument("--flags", action="append")  # multiline text
     if len(sys.argv) == 1:
         import_from_ini(parser, "test.ini")
-        args = get_user_inputs(parser)
+        args = get_user_inputs_with_survey(parser)
     else:
         args = parser.parse_args()
     save_to_ini(parser, "test.ini", args)
