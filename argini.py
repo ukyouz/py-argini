@@ -3,6 +3,7 @@ import configparser
 from abc import ABC
 from argparse import ArgumentParser
 from argparse import Namespace
+from pathlib import Path
 from typing import Any
 
 
@@ -141,7 +142,7 @@ def _iter_actions(
 
 
 def import_from_ini(
-    parser: ArgumentParser, ini_file: str, user_validators: dict[str, Validator] = None
+    parser: ArgumentParser, ini_file: str | Path, user_validators: dict[str, Validator] = None
 ):
     """
     import config settings from ini, and replace the default value in ArgumentParser
@@ -296,7 +297,7 @@ def get_user_inputs_with_survey(
 
 def save_to_ini(
     parser: ArgumentParser,
-    ini_file: str,
+    ini_file: str | Path,
     args: Namespace,
     user_validators: dict[str, Validator] = None,
 ):
