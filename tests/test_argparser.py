@@ -51,6 +51,22 @@ def test_1(simple_parser, mocker):
     assert args.ok is True
 
 
+def test_2(simple_parser, mocker):
+    with mocker.patch("builtins.input", side_effect=(
+        (
+            "123",
+            "aaa",
+            "banana",
+            "0",
+        )
+    )):
+        args = argini.get_user_inputs(simple_parser)
+    assert args.test == "123"
+    assert args.other == "aaa"
+    assert args.fruit == "banana"
+    assert args.ok is False
+
+
 def test_1_only_args(simple_parser: argparse.ArgumentParser, mocker):
     with mocker.patch("builtins.input", side_effect=(
         (
