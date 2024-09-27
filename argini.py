@@ -32,6 +32,7 @@ def input_multilines(title: str = "") -> list[str]:
 class Validator(ABC):
     @staticmethod
     def get_value_repr(val: Any) -> str:
+        """default value repr"""
         if isinstance(val, str):
             return val
         else:
@@ -43,10 +44,12 @@ class Validator(ABC):
 
     @staticmethod
     def get_value_from_input(input: str | list) -> Any:
+        """convert the `input` to the actual python object"""
         return input
 
     @staticmethod
     def match_action(action) -> bool:
+        """check whether this validator is a matched one for `action`"""
         return False
 
 
@@ -113,6 +116,54 @@ DEFAULT_VALIDATOR = {
     bool: BoolType,
     str: StrType,
 }
+
+
+class ValidatePath(StrType):
+    @staticmethod
+    def validate_input(input: str | list) -> bool:
+        try:
+            input = ValidatePath.get_value_from_input(input)
+        except ValueError:
+            return False
+        ok = Path(input).exists()
+        if not ok:
+            print("Path not exist: %r" % input)
+        return ok
+
+    @staticmethod
+    def get_value_from_input(input: str | list) -> str:
+        if not isinstance(input, str):
+            raise ValueError("Invalid input: %r" % input)
+        input = input.strip()
+        if input[0] == input[-1] == '"':
+            input = input[1:-1]
+        return input
+
+
+class ValidateFile(StrType):
+    @staticmethod
+    def validate_input(input: str | list) -> bool:
+        try:
+            input = ValidatePath.get_value_from_input(input)
+        except ValueError:
+            return False
+        ok = Path(input).is_file()
+        if not ok:
+            print("Path is not a file: %r" % input)
+        return ok
+
+
+class ValidateFolder(StrType):
+    @staticmethod
+    def validate_input(input: str | list) -> bool:
+        try:
+            input = ValidatePath.get_value_from_input(input)
+        except ValueError:
+            return False
+        ok = Path(input).is_dir()
+        if not ok:
+            print("Path is not a folder: %r" % input)
+        return ok
 
 
 def _iter_actions(

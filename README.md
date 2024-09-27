@@ -52,6 +52,20 @@ args = argini.get_uesr_inputs(parser, user_validators={
 }
 ```
 
+### builtin validators
+
+- ValidatePath
+- ValidateFile
+- ValidateFolder
+
+usage is like:
+
+```
+args = argini.get_uesr_inputs(parser, user_validators={
+    "test": argini.ValidateFile,
+}
+```
+
 ## With 3rd Party Package Installed
 
 - pip install survey
