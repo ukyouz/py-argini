@@ -5,6 +5,7 @@ from argparse import ArgumentParser
 from argparse import Namespace
 from pathlib import Path
 from typing import Any
+from typing import Type
 
 
 class MissingRequiredArgument(Exception):
@@ -117,7 +118,7 @@ DEFAULT_VALIDATOR = {
 def _iter_actions(
     parser: ArgumentParser,
     args: Namespace = None,
-    user_validators: dict[str, Validator] = None,
+    user_validators: dict[str, Type[Validator]] = None,
 ):
     args = args or Namespace()
     for action in parser._actions:
@@ -142,7 +143,7 @@ def _iter_actions(
 
 
 def import_from_ini(
-    parser: ArgumentParser, ini_file: str | Path, user_validators: dict[str, Validator] = None
+    parser: ArgumentParser, ini_file: str | Path, user_validators: dict[str, Type[Validator]] = None
 ):
     """
     import config settings from ini, and replace the default value in ArgumentParser
@@ -157,10 +158,7 @@ def import_from_ini(
         if action.dest not in default_section:
             continue
         data = default_section[action.dest]
-        if IterableType.match_action(action):
-            val = validator.get_value_from_input(data)
-        else:
-            val = data
+        val = validator.get_value_from_input(data)
         if validator.validate_input(val):
             init_configs[action.dest] = val
     parser.set_defaults(**init_configs)
@@ -169,7 +167,7 @@ def import_from_ini(
 def get_user_inputs(
     parser: ArgumentParser,
     only_asks: list[str] = None,
-    user_validators: dict[str, Validator] = None,
+    user_validators: dict[str, Type[Validator]] = None,
 ) -> Namespace:
     """
     `only_asks`: choose which arguments to ask user
@@ -223,7 +221,7 @@ def get_user_inputs(
 def get_user_inputs_with_survey(
     parser: ArgumentParser,
     only_asks: list[str] = None,
-    user_validators: dict[str, Validator] = None,
+    user_validators: dict[str, Type[Validator]] = None,
 ) -> Namespace:
     """
     `only_asks`: choose which arguments to ask user
@@ -299,7 +297,7 @@ def save_to_ini(
     parser: ArgumentParser,
     ini_file: str | Path,
     args: Namespace,
-    user_validators: dict[str, Validator] = None,
+    user_validators: dict[str, Type[Validator]] = None,
 ):
     user_validators = user_validators or {}
     config = configparser.ConfigParser()
@@ -320,14 +318,14 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--test")  # line
-    parser.add_argument("--fruit", choices=["apple", "banana"])  # choice
+    # parser.add_argument("--test")  # line
+    # parser.add_argument("--fruit", choices=["apple", "banana"])  # choice
     parser.add_argument("--ok", action="store_true")  # flag
-    parser.add_argument("--options", nargs="*")  # multiline text
-    parser.add_argument("--flags", action="append")  # multiline text
+    # parser.add_argument("--options", nargs="*")  # multiline text
+    # parser.add_argument("--flags", action="append")  # multiline text
     if len(sys.argv) == 1:
         import_from_ini(parser, "test.ini")
-        args = get_user_inputs_with_survey(parser)
+        args = get_user_inputs(parser)
     else:
         args = parser.parse_args()
     save_to_ini(parser, "test.ini", args)
