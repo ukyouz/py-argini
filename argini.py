@@ -356,7 +356,7 @@ def get_user_inputs(
             if data != default_txt or action.required:
                 args.extend(_make_args(action, value))
 
-    out_ns, _ = parser.parse_known_args(args)
+    out_ns, _ = parser.parse_known_args(args, ns)
 
     return out_ns
 
