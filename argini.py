@@ -1,8 +1,12 @@
 import ast
 import configparser
+import sys
 from abc import ABC
+from argparse import _HelpAction
+from argparse import _SubParsersAction
 from argparse import ArgumentParser
 from argparse import Namespace
+from io import StringIO
 from pathlib import Path
 from typing import Any
 from typing import Type
@@ -15,6 +19,16 @@ class MissingRequiredArgument(Exception):
 class NotSupportError(Exception):
     """error usage for this package"""
 
+
+def format_card(text: str) -> str:
+    lines = text.splitlines()
+    max_len = max(len(x) for x in lines)
+    card = StringIO()
+    card.write("╭{}╮\n".format("─" * (max_len + 2)))
+    for l in lines:
+        card.write(("│ {:<%d} │\n" % max_len).format(l))
+    card.write("╰{}╯".format("─" * (max_len + 2)))
+    return card.getvalue()
 
 # https://stackoverflow.com/questions/30239092/how-to-get-multiline-input-from-the-user
 def input_multilines(title: str = "") -> list[str]:
@@ -43,7 +57,7 @@ class Validator(ABC):
         return input != ""
 
     @staticmethod
-    def get_value_from_input(input: str | list) -> Any:
+    def get_value_from_input(input: str | list) -> str | list:
         """convert the `input` to the actual python object"""
         return input
 
@@ -107,7 +121,11 @@ class BoolType(Validator):
 
     @staticmethod
     def match_action(action) -> bool:
-        return isinstance(action.default, bool) or action.__class__.__name__ == "_StoreTrueAction"
+        return (
+            isinstance(action.default, bool)
+            or action.__class__.__name__ == "_StoreTrueAction"
+            or action.__class__.__name__ == "_StoreConstAction"
+        )
 
 
 DEFAULT_VALIDATOR = {
@@ -173,15 +191,20 @@ def _iter_actions(
 ):
     args = args or Namespace()
     for action in parser._actions:
-        if action.dest == "help":
+        dest = "__subcommand__" if isinstance(action, _SubParsersAction) else action.dest
+        if isinstance(action, _HelpAction):
             continue
         if action.dest in user_validators:
-            validator = user_validators[action.dest]
+            validator = user_validators[dest]
+        elif isinstance(action, _SubParsersAction):
+            validator = StrType
         elif action.default is None and action.const is not None:
             raise NotImplementedError(action)
+        elif BoolType.match_action(action):
+            validator = BoolType
         else:
             validator = StrType
-            possible_val = getattr(args, action.dest, action.default)
+            possible_val = getattr(args, dest, action.default)
             if possible_val is None:
                 for v in DEFAULT_VALIDATOR.values():
                     if v.match_action(action):
@@ -193,8 +216,62 @@ def _iter_actions(
         yield action, validator
 
 
+def _import_from_ini_section(
+    config,
+    section: str,
+    parser: ArgumentParser,
+    user_validators: dict[str, Type[Validator]]
+):
+    init_configs = {}
+    for action, validator in _iter_actions(parser, user_validators=user_validators):
+        if isinstance(action, _SubParsersAction):
+            val = config[section].get("__subcommand__", None)
+            action.default = val
+            for subcmd in action.choices.keys():
+                if not config.has_section(subcmd):
+                    continue
+                _import_from_ini_section(config, subcmd, action.choices[subcmd], user_validators)
+        else:
+            if action.dest not in config[section]:
+                continue
+            data = config[section][action.dest]
+            val = validator.get_value_from_input(data)
+            if validator.validate_input(val):
+                init_configs[action.dest] = val
+    parser.set_defaults(**init_configs)
+
+
+def _make_args(action, value: str | list) -> list[str]:
+    args = []
+
+    opt_str = action.option_strings[0] if action.option_strings else ""
+    if BoolType.match_action(action):
+        if value:
+            args.append(opt_str)
+    else:
+        if isinstance(value, list):
+            if action.nargs in {"*", "+"}:
+                if opt_str:
+                    args.append(opt_str)
+                for x in value:
+                    args.append(x)
+            else:
+                for x in value:
+                    if opt_str:
+                        args.append(opt_str)
+                    args.append(x)
+        else:
+            if opt_str:
+                args.append(opt_str)
+            args.append(value)
+
+    return args
+
+
 def import_from_ini(
-    parser: ArgumentParser, ini_file: str | Path, user_validators: dict[str, Type[Validator]] = None
+    parser: ArgumentParser,
+    ini_file: str | Path,
+    user_validators: dict[str, Type[Validator]] = None
 ):
     """
     import config settings from ini, and replace the default value in ArgumentParser
@@ -203,22 +280,15 @@ def import_from_ini(
 
     config = configparser.ConfigParser()
     config.read(ini_file)
-    default_section = config["DEFAULT"]
-    init_configs = {}
-    for action, validator in _iter_actions(parser, user_validators=user_validators):
-        if action.dest not in default_section:
-            continue
-        data = default_section[action.dest]
-        val = validator.get_value_from_input(data)
-        if validator.validate_input(val):
-            init_configs[action.dest] = val
-    parser.set_defaults(**init_configs)
+    _import_from_ini_section(config, config.default_section, parser, user_validators)
 
 
 def get_user_inputs(
     parser: ArgumentParser,
     only_asks: list[str] = None,
     user_validators: dict[str, Type[Validator]] = None,
+    show_help = True,
+    _args: list[str] = None
 ) -> Namespace:
     """
     `only_asks`: choose which arguments to ask user
@@ -230,13 +300,21 @@ def get_user_inputs(
     user_validators = user_validators or {}
     only_asks = only_asks or []
 
-    args = Namespace()
+    args = _args or []
+    ns = Namespace()
+
+    if show_help:
+        help_str = StringIO()
+        parser.print_help(file=help_str)
+        print(format_card(help_str.getvalue()))
+
     for action, validator in _iter_actions(parser, user_validators=user_validators):
+        dest = "__subcommand__" if isinstance(action, _SubParsersAction) else action.dest
         if only_asks:
-            if action is not None and action.dest not in only_asks:
+            if action is not None and dest not in only_asks:
                 if action.required and action.default is not None:
-                    raise MissingRequiredArgument(action.dest)
-                setattr(args, action.dest, action.default)
+                    raise MissingRequiredArgument(dest)
+                args.extend(_make_args(action, action.default))
                 continue
 
         default_txt = validator.get_value_repr(action.default)
@@ -248,9 +326,9 @@ def get_user_inputs(
         while True:
             # Get User Input
             if IterableType.match_action(action):
-                data = input_multilines(action.dest + "? ")
+                data = input_multilines(dest + "? ")
             else:
-                data = input(action.dest + "? " + opts)
+                data = input(dest + "? " + opts)
             if not data and default_txt:
                 data = default_txt
 
@@ -264,15 +342,31 @@ def get_user_inputs(
                 break
 
         value = validator.get_value_from_input(data)
-        setattr(args, action.dest, value)
+        if isinstance(action, _SubParsersAction):
+            args.extend(_make_args(action, value))
+            setattr(ns, dest, value)
+            get_user_inputs(
+                action.choices[value],
+                only_asks,
+                user_validators,
+                show_help,
+                _args=args,
+            )
+        else:
+            if data != default_txt or action.required:
+                args.extend(_make_args(action, value))
 
-    return args
+    out_ns, _ = parser.parse_known_args(args)
+
+    return out_ns
 
 
 def get_user_inputs_with_survey(
     parser: ArgumentParser,
     only_asks: list[str] = None,
     user_validators: dict[str, Type[Validator]] = None,
+    show_help=True,
+    _args: list[str] = None
 ) -> Namespace:
     """
     `only_asks`: choose which arguments to ask user
@@ -286,13 +380,21 @@ def get_user_inputs_with_survey(
     user_validators = user_validators or {}
     only_asks = only_asks or []
 
-    args = Namespace()
+    args = _args or []
+    ns = Namespace()
+
+    if show_help:
+        help_str = StringIO()
+        parser.print_help(file=help_str)
+        print(format_card(help_str.getvalue()))
+
     for action, validator in _iter_actions(parser, user_validators=user_validators):
+        dest = "__subcommand__" if isinstance(action, _SubParsersAction) else action.dest
         if only_asks:
-            if action is not None and action.dest not in only_asks:
+            if action is not None and dest not in only_asks:
                 if action.required and action.default is not None:
-                    raise MissingRequiredArgument(action.dest)
-                setattr(args, action.dest, action.default)
+                    raise MissingRequiredArgument(dest)
+                args.extend(_make_args(action, action.default))
                 continue
 
         default_txt = validator.get_value_repr(action.default)
@@ -310,24 +412,31 @@ def get_user_inputs_with_survey(
                     default = list(action.choices).index(default_txt)
                 else:
                     default = 0
+                opts = list(action.choices)
                 idx = survey.routines.select(
-                    action.dest + "? ", options=list(action.choices), index=default
+                    dest + "? ", options=opts, index=default
                 )
-                value = action.choices[idx]
+                if isinstance(action.choices, dict):
+                    value = opts[idx]
+                else:
+                    value = action.choices[idx]
                 break
 
             if IterableType.match_action(action):
                 data = survey.routines.input(
-                    action.dest
+                    dest
                     + "? "
                     + "Item per line. Press Enter 3 times to continue.",
                     multi=True,
                 )
                 data = data.splitlines()
             elif BoolType.match_action(action):
-                data = survey.routines.inquire(action.dest + "? ", default=BoolType.get_value_from_input(default_txt))
+                data = survey.routines.inquire(
+                    dest + "? ",
+                    default=BoolType.get_value_from_input(default_txt)
+                )
             else:
-                data = survey.routines.input(action.dest + "? ")
+                data = survey.routines.input(dest + "? ")
             if data == "" and default_txt:
                 data = default_txt
 
@@ -339,9 +448,45 @@ def get_user_inputs_with_survey(
                 value = data
                 break
 
-        setattr(args, action.dest, value)
+        if isinstance(action, _SubParsersAction):
+            args.extend(_make_args(action, value))
+            setattr(ns, dest, value)
+            get_user_inputs_with_survey(
+                action.choices[value],
+                only_asks,
+                user_validators,
+                show_help,
+                _args=args,
+            )
+        else:
+            if value != action.default or action.required:
+                args.extend(_make_args(action, value))
 
-    return args
+    out_ns, _ = parser.parse_known_args(args, ns)
+
+    return out_ns
+
+
+def _store_to_ini_section(
+    args: Namespace,
+    config: configparser.ConfigParser,
+    section: str,
+    parser: ArgumentParser,
+    user_validators: dict[str, Type[Validator]]
+):
+    for action, val_func in _iter_actions(parser, args, user_validators):
+        if isinstance(action, _SubParsersAction):
+            dest = "__subcommand__"
+            val = getattr(args, dest)
+            if not config.has_section(val):
+                config.add_section(val)
+            config[section][dest] = val
+            _store_to_ini_section(args, config, val, action.choices[val], user_validators)
+        else:
+            dest = action.dest
+            val = getattr(args, dest)
+            if val is not None:
+                config[section][dest] = val_func.get_value_repr(val)
 
 
 def save_to_ini(
@@ -353,11 +498,7 @@ def save_to_ini(
     user_validators = user_validators or {}
     config = configparser.ConfigParser()
     config.read(ini_file)
-    default_section = config["DEFAULT"]
-    for action, val_func in _iter_actions(parser, args, user_validators):
-        val = getattr(args, action.dest)
-        if val is not None:
-            default_section[action.dest] = val_func.get_value_repr(val)
+    _store_to_ini_section(args, config, config.default_section, parser, user_validators)
 
     with open(ini_file, "w") as config_file:
         config.write(config_file)
@@ -366,19 +507,26 @@ def save_to_ini(
 if __name__ == "__main__":
     # manually simple cli test
     import sys
-    import argparse
 
-    parser = argparse.ArgumentParser()
-    # parser.add_argument("--test")  # line
-    # parser.add_argument("--fruit", choices=["apple", "banana"])  # choice
-    parser.add_argument("--ok", action="store_true")  # flag
+    parser = ArgumentParser()
+    sub = parser.add_subparsers()
+
+    sub1 = sub.add_parser("test", help="123 123 123")
+    sub1.add_argument("--test", required=True)  # line
+    sub1.add_argument("--fruit", choices=["apple", "banana"])  # choice
+
+    sub2 = sub.add_parser("add", help="123 123 123")
+    sub2.add_argument("--yyy", required=True)  # line
+    sub2.add_argument("--xxx", choices=["apple", "banana"])  # choice
+
+    # parser.add_argument("--ok", action="store_true")  # flag
     # parser.add_argument("--options", nargs="*")  # multiline text
     # parser.add_argument("--flags", action="append")  # multiline text
     if len(sys.argv) == 1:
         import_from_ini(parser, "test.ini")
-        args = get_user_inputs(parser)
+        args = get_user_inputs_with_survey(parser)
+        save_to_ini(parser, "test.ini", args)
     else:
         args = parser.parse_args()
-    save_to_ini(parser, "test.ini", args)
 
     print(args)

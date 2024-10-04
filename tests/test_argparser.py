@@ -11,7 +11,7 @@ def simple_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--test")  # line
     parser.add_argument("--other")
-    parser.add_argument("--fruit", choices=["apple", "banana"])  # choice
+    parser.add_argument("--fruit", choices=["apple", "banana"], default="apple")  # choice
     parser.add_argument("--ok", action="store_true")  # flag
     return parser
 

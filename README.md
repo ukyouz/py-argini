@@ -31,6 +31,14 @@ else:
 print(args.test)
 ```
 
+If you don't want to see the help text by default, turn off by setting `show_help` keyword argument to `False`:
+
+```python
+# ...
+    args = argini.get_user_inputs(parser, show_help=False)
+# ...
+```
+
 ## Validator
 
 ### for specific argument
