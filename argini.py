@@ -1,6 +1,8 @@
 import ast
 import configparser
+import os
 import sys
+import textwrap
 from abc import ABC
 from argparse import _HelpAction
 from argparse import _SubParsersAction
@@ -22,11 +24,14 @@ class NotSupportError(Exception):
 
 def format_card(text: str) -> str:
     lines = text.splitlines()
-    max_len = max(len(x) for x in lines)
+    terminal_width = os.get_terminal_size()[0] - 4
+    max_len = min(max(len(x) for x in lines), terminal_width)
     card = StringIO()
     card.write("╭{}╮\n".format("─" * (max_len + 2)))
     for l in lines:
-        card.write(("│ {:<%d} │\n" % max_len).format(l))
+        wraps = textwrap.wrap(l, width=terminal_width)
+        for wrapped_line in wraps:
+            card.write(("│ {:<%d} │\n" % max_len).format(wrapped_line))
     card.write("╰{}╯".format("─" * (max_len + 2)))
     return card.getvalue()
 
