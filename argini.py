@@ -487,6 +487,15 @@ def _store_to_ini_section(
                 config.add_section(val)
             config[section][dest] = val
             _store_to_ini_section(args, config, val, action.choices[val], user_validators)
+        elif BoolType.match_action(action):
+            dest = action.dest
+            val = getattr(args, dest)
+            if action.const is not None:
+                config[section][dest] = str(val == action.const)
+            elif isinstance(val, bool):
+                config[section][dest] = str(val)
+            else:
+                raise NotImplementedError(action)
         else:
             dest = action.dest
             val = getattr(args, dest)
