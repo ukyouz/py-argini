@@ -42,7 +42,7 @@ def test_validator_path():
 def simple_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     parser.add_argument("--test")  # line
-    parser.add_argument("--other")
+    parser.add_argument("--other", default="other")
     parser.add_argument("--fruit", choices=["apple", "banana"], default="apple")  # choice
     parser.add_argument("--ok", action="store_true")  # flag
     return parser
@@ -76,7 +76,7 @@ def test_parse_1(simple_parser, mocker):
             "1",
         )
     )):
-        args = argini.get_user_inputs(simple_parser)
+        args = argini.get_user_inputs(simple_parser, show_help=False)
     assert args.test == "123"
     assert args.other == "aaa"
     assert args.fruit == "banana"
@@ -92,7 +92,7 @@ def test_parse_2(simple_parser, mocker):
             "0",
         )
     )):
-        args = argini.get_user_inputs(simple_parser)
+        args = argini.get_user_inputs(simple_parser, show_help=False)
     assert args.test == "123"
     assert args.other == "aaa"
     assert args.fruit == "banana"
@@ -105,8 +105,8 @@ def test_parse_1_only_args(simple_parser: argparse.ArgumentParser, mocker):
             "123",
         )
     )):
-        args = argini.get_user_inputs(simple_parser, only_asks=["test"])
-    assert args.other is None
+        args = argini.get_user_inputs(simple_parser, only_asks=["test"], show_help=False)
+    assert args.other == "other"
 
 
 def test_parse_1_default(simple_parser: argparse.ArgumentParser, mocker):
@@ -117,7 +117,7 @@ def test_parse_1_default(simple_parser: argparse.ArgumentParser, mocker):
         ok=True,
     )
     with mocker.patch("builtins.input", return_value=""):
-        args = argini.get_user_inputs(simple_parser)
+        args = argini.get_user_inputs(simple_parser, show_help=False)
     assert args.test == "123"
     assert args.other == "aaa"
     assert args.fruit == "banana"
@@ -155,7 +155,7 @@ def test_parse_multiline(multiline_parser: argparse.ArgumentParser, mocker):
             ["1", "2"],
         )
     )):
-        args = argini.get_user_inputs(multiline_parser)
+        args = argini.get_user_inputs(multiline_parser, show_help=False)
     assert args.options == ["aaa", "bbb"]
     assert args.flags == ["1", "2"]
 
@@ -166,7 +166,7 @@ def test_parse_multiline_default(multiline_parser: argparse.ArgumentParser, mock
         flags=["1", "2"],
     )
     with mocker.patch("argini.input_multilines", return_value=[]):
-        args = argini.get_user_inputs(multiline_parser)
+        args = argini.get_user_inputs(multiline_parser, show_help=False)
     assert args.options == ["aaa", "bbb"]
     assert args.flags == ["1", "2"]
 
@@ -189,7 +189,7 @@ def test_subparsers(subparser: argparse.ArgumentParser, mocker):
             "aaa",
         )
     )):
-        args = argini.get_user_inputs(subparser)
+        args = argini.get_user_inputs(subparser, show_help=False)
     assert args.subparser == "sub1"
     assert args.sub1 == "aaa"
 
@@ -201,7 +201,7 @@ def test_subparsers_io(subparser: argparse.ArgumentParser, mocker):
             "aaa",
         )
     )):
-        args = argini.get_user_inputs(subparser)
+        args = argini.get_user_inputs(subparser, show_help=False)
     argini.save_to_ini(subparser, TEST_INI_FILE, args)
     assert Path(TEST_INI_FILE).exists()
 
