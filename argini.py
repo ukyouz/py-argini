@@ -296,20 +296,22 @@ def print_help(parser: ArgumentParser):
 
 def get_user_inputs(
     parser: ArgumentParser,
-    only_asks: list[str] = None,
+    only_asks: list[str] | None = None,
     user_validators: dict[str, Type[Validator]] = None,
     show_help = True,
     _args: list[str] = None
 ) -> Namespace:
     """
     `only_asks`: choose which arguments to ask user
-        others just use default values
+        if set to None: ask for every arguments
+        if set to list[str]:
+            prefer only ask for the listed arguments
+            if the default value is not set, user still require to answer for those arguments
     `user_validators`: specify customized validators,
         key is the argument key
         value is a subclass of argini.Validator
     """
     user_validators = user_validators or {}
-    only_asks = only_asks or []
 
     args = _args or []
     ns = Namespace()
@@ -317,10 +319,8 @@ def get_user_inputs(
 
     for action, validator in _iter_actions(parser, user_validators=user_validators):
         dest = "__subcommand__" if isinstance(action, _SubParsersAction) else action.dest
-        if only_asks:
-            if action is not None and dest not in only_asks:
-                if action.required and action.default is not None:
-                    raise MissingRequiredArgument(dest)
+        if isinstance(only_asks, list):
+            if dest not in only_asks and action.default is not None:
                 args.extend(_make_args(action, action.default))
                 continue
 
@@ -375,14 +375,17 @@ def get_user_inputs(
 
 def get_user_inputs_with_survey(
     parser: ArgumentParser,
-    only_asks: list[str] = None,
+    only_asks: list[str] | None = None,
     user_validators: dict[str, Type[Validator]] = None,
     show_help=True,
     _args: list[str] = None
 ) -> Namespace:
     """
     `only_asks`: choose which arguments to ask user
-        others just use default values
+        if set to None: ask for every arguments
+        if set to list[str]:
+            prefer only ask for the listed arguments
+            if the default value is not set, user still require to answer for those arguments
     `user_validators`: specify customized validators,
         key is the argument key
         value is a subclass of argini.Validator
@@ -390,7 +393,6 @@ def get_user_inputs_with_survey(
     import survey
 
     user_validators = user_validators or {}
-    only_asks = only_asks or []
 
     args = _args or []
     ns = Namespace()
@@ -398,10 +400,8 @@ def get_user_inputs_with_survey(
 
     for action, validator in _iter_actions(parser, user_validators=user_validators):
         dest = "__subcommand__" if isinstance(action, _SubParsersAction) else action.dest
-        if only_asks:
-            if action is not None and dest not in only_asks:
-                if action.required and action.default is not None:
-                    raise MissingRequiredArgument(dest)
+        if isinstance(only_asks, list):
+            if dest not in only_asks and action.default is not None:
                 args.extend(_make_args(action, action.default))
                 continue
 
