@@ -288,6 +288,12 @@ def import_from_ini(
     _import_from_ini_section(config, config.default_section, parser, user_validators)
 
 
+def print_help(parser: ArgumentParser):
+    help_str = StringIO()
+    parser.print_help(file=help_str)
+    print(format_card(help_str.getvalue()))
+
+
 def get_user_inputs(
     parser: ArgumentParser,
     only_asks: list[str] = None,
@@ -307,11 +313,7 @@ def get_user_inputs(
 
     args = _args or []
     ns = Namespace()
-
-    if show_help:
-        help_str = StringIO()
-        parser.print_help(file=help_str)
-        print(format_card(help_str.getvalue()))
+    _show_help = show_help
 
     for action, validator in _iter_actions(parser, user_validators=user_validators):
         dest = "__subcommand__" if isinstance(action, _SubParsersAction) else action.dest
@@ -321,6 +323,11 @@ def get_user_inputs(
                     raise MissingRequiredArgument(dest)
                 args.extend(_make_args(action, action.default))
                 continue
+
+        if _show_help:
+            # only print help at the first question
+            print_help(parser)
+            _show_help = False
 
         default_txt = validator.get_value_repr(action.default)
         q = f" (Default: {default_txt}) " if default_txt else ""
@@ -387,11 +394,7 @@ def get_user_inputs_with_survey(
 
     args = _args or []
     ns = Namespace()
-
-    if show_help:
-        help_str = StringIO()
-        parser.print_help(file=help_str)
-        print(format_card(help_str.getvalue()))
+    _show_help = show_help
 
     for action, validator in _iter_actions(parser, user_validators=user_validators):
         dest = "__subcommand__" if isinstance(action, _SubParsersAction) else action.dest
@@ -401,6 +404,11 @@ def get_user_inputs_with_survey(
                     raise MissingRequiredArgument(dest)
                 args.extend(_make_args(action, action.default))
                 continue
+
+        if _show_help:
+            # only print help at the first question
+            print_help(parser)
+            _show_help = False
 
         default_txt = validator.get_value_repr(action.default)
         if BoolType.match_action(action) or action.choices:
