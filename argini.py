@@ -236,6 +236,17 @@ def _import_from_ini_section(
                 if not config.has_section(subcmd):
                     continue
                 _import_from_ini_section(config, subcmd, action.choices[subcmd], user_validators)
+        elif BoolType.match_action(action):
+            if action.dest not in config[section]:
+                continue
+            data = config[section][action.dest]
+            val = validator.get_value_from_input(data)
+            if action.const is not None:
+                init_configs[action.dest] = action.const if val else action.default
+            elif isinstance(val, bool):
+                init_configs[action.dest] = val
+            else:
+                raise NotImplementedError(action)
         else:
             if action.dest not in config[section]:
                 continue
@@ -329,7 +340,17 @@ def get_user_inputs(
             print_help(parser)
             _show_help = False
 
-        default_txt = validator.get_value_repr(action.default)
+        if BoolType.match_action(action):
+            if action.const is not None:
+                default_txt = str(action.const == action.default)
+            elif isinstance(action.default, bool):
+                default_txt = str(action.default)
+            else:
+                raise NotImplementedError(action)
+        elif action.choices:
+            default_txt = action.default or ""
+        else:
+            default_txt = validator.get_value_repr(action.default)
         q = f" (Default: {default_txt}) " if default_txt else ""
         opts = "{%s}" % ",".join(action.choices) + " " if action.choices else ""
 
@@ -410,11 +431,18 @@ def get_user_inputs_with_survey(
             print_help(parser)
             _show_help = False
 
-        default_txt = validator.get_value_repr(action.default)
-        if BoolType.match_action(action) or action.choices:
-            q = ""
+        if BoolType.match_action(action):
+            if action.const is not None:
+                default_txt = str(action.const == action.default)
+            elif isinstance(action.default, bool):
+                default_txt = str(action.default)
+            else:
+                raise NotImplementedError(action)
+        elif action.choices:
+            default_txt = action.default or ""
         else:
-            q = f" (Default: {default_txt}) "
+            default_txt = validator.get_value_repr(action.default)
+        q = f" (Default: {default_txt}) " if default_txt else ""
 
         if title := (action.help or "") + q:
             print(title)
