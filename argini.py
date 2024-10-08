@@ -227,11 +227,10 @@ def _import_from_ini_section(
     parser: ArgumentParser,
     user_validators: dict[str, Type[Validator]]
 ):
-    init_configs = {}
     for action, validator in _iter_actions(parser, user_validators=user_validators):
         if isinstance(action, _SubParsersAction):
             val = config[section].get("__subcommand__", None)
-            action.default = val
+            setattr(action, "user_default", val)
             for subcmd in action.choices.keys():
                 if not config.has_section(subcmd):
                     continue
@@ -242,9 +241,9 @@ def _import_from_ini_section(
             data = config[section][action.dest]
             val = validator.get_value_from_input(data)
             if action.const is not None:
-                init_configs[action.dest] = action.const if val else action.default
+                setattr(action, "user_default", action.const if val else action.default)
             elif isinstance(val, bool):
-                init_configs[action.dest] = val
+                setattr(action, "user_default", val)
             else:
                 raise NotImplementedError(action)
         else:
@@ -253,8 +252,7 @@ def _import_from_ini_section(
             data = config[section][action.dest]
             val = validator.get_value_from_input(data)
             if validator.validate_input(val):
-                init_configs[action.dest] = val
-    parser.set_defaults(**init_configs)
+                setattr(action, "user_default", val)
 
 
 def _make_args(action, value: str | list) -> list[str]:
@@ -330,51 +328,54 @@ def get_user_inputs(
 
     for action, validator in _iter_actions(parser, user_validators=user_validators):
         dest = "__subcommand__" if isinstance(action, _SubParsersAction) else action.dest
+        default = getattr(action, "user_default", action.default)
+
+        value = None
         if isinstance(only_asks, list):
-            if dest not in only_asks and action.default is not None:
-                args.extend(_make_args(action, action.default))
-                continue
+            if dest not in only_asks and default is not None:
+                value = default
 
-        if _show_help:
-            # only print help at the first question
-            print_help(parser)
-            _show_help = False
+        if value is None:
+            if _show_help:
+                # only print help at the first question
+                print_help(parser)
+                _show_help = False
 
-        if BoolType.match_action(action):
-            if action.const is not None:
-                default_txt = str(action.const == action.default)
-            elif isinstance(action.default, bool):
-                default_txt = str(action.default)
-            else:
-                raise NotImplementedError(action)
-        elif action.choices:
-            default_txt = action.default or ""
-        else:
-            default_txt = validator.get_value_repr(action.default)
-        q = f" (Default: {default_txt}) " if default_txt else ""
-        opts = "{%s}" % ",".join(action.choices) + " " if action.choices else ""
-
-        if title := (action.help or "") + q:
-            print(title)
-        while True:
-            # Get User Input
-            if IterableType.match_action(action):
-                data = input_multilines(dest + "? ")
-            else:
-                data = input(dest + "? " + opts)
-            if not data and default_txt:
-                data = default_txt
-
-            # Validation
-            if action.choices:
-                if data in action.choices:
-                    break
+            if BoolType.match_action(action):
+                if action.const is not None:
+                    default_txt = str(action.const == default)
+                elif isinstance(default, bool):
+                    default_txt = str(default)
                 else:
-                    print("Oops! not a valid choice.", file=sys.stderr)
-            elif validator.validate_input(data):
-                break
+                    raise NotImplementedError(action)
+            elif action.choices:
+                default_txt = default or ""
+            else:
+                default_txt = validator.get_value_repr(default)
+            q = f" (Default: {default_txt}) " if default_txt else ""
+            opts = "{%s}" % ",".join(action.choices) + " " if action.choices else ""
 
-        value = validator.get_value_from_input(data)
+            if title := (action.help or "") + q:
+                print(title)
+            while True:
+                # Get User Input
+                if IterableType.match_action(action):
+                    data = input_multilines(dest + "? ")
+                else:
+                    data = input(dest + "? " + opts)
+                if not data and default_txt:
+                    data = default_txt
+
+                # Validation
+                if action.choices:
+                    if data in action.choices:
+                        break
+                    else:
+                        print("Oops! not a valid choice.", file=sys.stderr)
+                elif validator.validate_input(data):
+                    break
+            value = validator.get_value_from_input(data)
+
         if isinstance(action, _SubParsersAction):
             args.extend(_make_args(action, value))
             setattr(ns, dest, value)
@@ -386,7 +387,7 @@ def get_user_inputs(
                 _args=args,
             )
         else:
-            if data != default_txt or action.required:
+            if value != action.default or action.required:
                 args.extend(_make_args(action, value))
 
     out_ns, _ = parser.parse_known_args(args, ns)
@@ -421,73 +422,76 @@ def get_user_inputs_with_survey(
 
     for action, validator in _iter_actions(parser, user_validators=user_validators):
         dest = "__subcommand__" if isinstance(action, _SubParsersAction) else action.dest
+        default = getattr(action, "user_default", action.default)
+
+        value = None
         if isinstance(only_asks, list):
-            if dest not in only_asks and action.default is not None:
-                args.extend(_make_args(action, action.default))
-                continue
+            if dest not in only_asks and default is not None:
+                value = default
 
-        if _show_help:
-            # only print help at the first question
-            print_help(parser)
-            _show_help = False
+        if value is None:
+            if _show_help:
+                # only print help at the first question
+                print_help(parser)
+                _show_help = False
 
-        if BoolType.match_action(action):
-            if action.const is not None:
-                default_txt = str(action.const == action.default)
-            elif isinstance(action.default, bool):
-                default_txt = str(action.default)
-            else:
-                raise NotImplementedError(action)
-        elif action.choices:
-            default_txt = action.default or ""
-        else:
-            default_txt = validator.get_value_repr(action.default)
-        q = f" (Default: {default_txt}) " if default_txt else ""
-
-        if title := (action.help or "") + q:
-            print(title)
-        while True:
-            # Get User Input
-            if action.choices:
-                if default_txt in action.choices:
-                    default = list(action.choices).index(default_txt)
+            if BoolType.match_action(action):
+                if action.const is not None:
+                    default_txt = str(action.const == default)
+                elif isinstance(default, bool):
+                    default_txt = str(default)
                 else:
-                    default = 0
-                opts = list(action.choices)
-                idx = survey.routines.select(
-                    dest + "? ", options=opts, index=default
-                )
-                if isinstance(action.choices, dict):
-                    value = opts[idx]
-                else:
-                    value = action.choices[idx]
-                break
-
-            if IterableType.match_action(action):
-                data = survey.routines.input(
-                    dest
-                    + "? "
-                    + "Item per line. Press Enter 3 times to continue.",
-                    multi=True,
-                )
-                data = data.splitlines()
-            elif BoolType.match_action(action):
-                data = survey.routines.inquire(
-                    dest + "? ",
-                    default=BoolType.get_value_from_input(default_txt)
-                )
+                    raise NotImplementedError(action)
+            elif action.choices:
+                default_txt = default or ""
             else:
-                data = survey.routines.input(dest + "? ")
-            if data == "" and default_txt:
-                data = default_txt
+                default_txt = validator.get_value_repr(default)
+            q = f" (Default: {default_txt}) " if default_txt else ""
 
-            # Validation
-            if validator.validate_input(data):
-                if action.nargs == "+" and not data:
-                    print("At least one is required!", file=sys.stderr)
-                    continue
-                value = data
-                break
+            if title := (action.help or "") + q:
+                print(title)
+            while True:
+                # Get User Input
+                if action.choices:
+                    if default_txt in action.choices:
+                        default = list(action.choices).index(default_txt)
+                    else:
+                        default = 0
+                    opts = list(action.choices)
+                    idx = survey.routines.select(
+                        dest + "? ", options=opts, index=default
+                    )
+                    if isinstance(action.choices, dict):
+                        value = opts[idx]
+                    else:
+                        value = action.choices[idx]
+                    break
+
+                if IterableType.match_action(action):
+                    data = survey.routines.input(
+                        dest
+                        + "? "
+                        + "Item per line. Press Enter 3 times to continue.",
+                        multi=True,
+                    )
+                    data = data.splitlines()
+                elif BoolType.match_action(action):
+                    data = survey.routines.inquire(
+                        dest + "? ",
+                        default=BoolType.get_value_from_input(default_txt)
+                    )
+                else:
+                    data = survey.routines.input(dest + "? ")
+                if data == "" and default_txt:
+                    data = default_txt
+
+                # Validation
+                if validator.validate_input(data):
+                    if action.nargs == "+" and not data:
+                        print("At least one is required!", file=sys.stderr)
+                        continue
+                    value = data
+                    break
 
         if isinstance(action, _SubParsersAction):
             args.extend(_make_args(action, value))
