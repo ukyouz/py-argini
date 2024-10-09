@@ -196,7 +196,7 @@ def _iter_actions(
 ):
     args = args or Namespace()
     for action in parser._actions:
-        dest = "__subcommand__" if isinstance(action, _SubParsersAction) else action.dest
+        dest = "__subcommand__" if action.dest == "==SUPPRESS==" else action.dest
         if isinstance(action, _HelpAction):
             continue
         if action.dest in user_validators:
@@ -229,7 +229,8 @@ def _import_from_ini_section(
 ):
     for action, validator in _iter_actions(parser, user_validators=user_validators):
         if isinstance(action, _SubParsersAction):
-            val = config[section].get("__subcommand__", None)
+            dest = "__subcommand__" if action.dest == "==SUPPRESS==" else action.dest
+            val = config[section].get(dest, None)
             setattr(action, "user_default", val)
             for subcmd in action.choices.keys():
                 if not config.has_section(subcmd):
@@ -327,7 +328,8 @@ def get_user_inputs(
     _show_help = show_help
 
     for action, validator in _iter_actions(parser, user_validators=user_validators):
-        dest = "__subcommand__" if isinstance(action, _SubParsersAction) else action.dest
+        # ==SUPPRESS== is default dest for parser.add_subparsers()
+        dest = "__subcommand__" if action.dest == "==SUPPRESS==" else action.dest
         default = getattr(action, "user_default", action.default)
 
         value = None
@@ -421,7 +423,8 @@ def get_user_inputs_with_survey(
     _show_help = show_help
 
     for action, validator in _iter_actions(parser, user_validators=user_validators):
-        dest = "__subcommand__" if isinstance(action, _SubParsersAction) else action.dest
+        # ==SUPPRESS== is default dest for parser.add_subparsers()
+        dest = "__subcommand__" if action.dest == "==SUPPRESS==" else action.dest
         default = getattr(action, "user_default", action.default)
 
         value = None
@@ -521,7 +524,7 @@ def _store_to_ini_section(
 ):
     for action, val_func in _iter_actions(parser, args, user_validators):
         if isinstance(action, _SubParsersAction):
-            dest = "__subcommand__"
+            dest = "__subcommand__" if action.dest == "==SUPPRESS==" else action.dest
             val = getattr(args, dest)
             if not config.has_section(val):
                 config.add_section(val)
