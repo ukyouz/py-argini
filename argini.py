@@ -160,6 +160,8 @@ class ValidatePath(StrType):
         input = input.strip()
         if input[0] == input[-1] == '"':
             input = input[1:-1]
+        if input[0] == input[-1] == "'":
+            input = input[1:-1]
         return input
 
 
